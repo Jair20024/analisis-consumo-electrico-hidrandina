@@ -1,5 +1,7 @@
 # Análisis de Consumo Eléctrico - Hidrandina (Q1 2025)
 
+![Dashboard de Consumo Eléctrico](./imagenes/dashboard.png)
+
 Proyecto de análisis de datos end-to-end: desde datos abiertos gubernamentales hasta un dashboard ejecutivo en Power BI, pasando por un proceso ETL y la carga a un Data Warehouse en SQL Server con modelado en estrella.
 
 ## 🎯 Objetivo
@@ -31,6 +33,7 @@ CSV (datos abiertos) → ETL (Google Colab) → Parquet limpio → Carga a SQL S
 ### 2. Carga al Data Warehouse — `notebooks/CargarASQLServer_Consumo_Electrico_Hindrandina.ipynb`
 - Lectura del `.parquet` limpio
 - Modelado dimensional en **esquema estrella**:
+![Modelo estrella](./imagenes/modelo_estrella.png)
   - `Dim_Cliente` (ubicación: departamento, provincia, distrito)
   - `Dim_Tarifa` (tarifa, cartera)
   - `Dim_Sucursal` (unidad de negocio)
