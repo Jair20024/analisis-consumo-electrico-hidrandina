@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CSV Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --paper:#F6F4EE; --panel:#FFFFFF; --ink:#1E2430; --muted:#6B7480; --line:#DEDAD0;
+  --blue:#2E5EAA; --blue-soft:#E7EEF9; --rust:#B24B29; --rust-soft:#F7E9E2;
+  --green:#2F7A5C; --green-soft:#E5F1EB; --amber:#9C7A1E; --amber-soft:#F6EFDC;
+  box-sizing:border-box;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#171A1F; --panel:#1F242B; --ink:#E7E9EC; --muted:#8B93A0; --line:#333A42;
+    --blue:#7BA5E0; --blue-soft:#233047; --rust:#E08A6B; --rust-soft:#3A2620;
+    --green:#7FC4A4; --green-soft:#1E3229; --amber:#D9BB6E; --amber-soft:#332A16;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#171A1F; --panel:#1F242B; --ink:#E7E9EC; --muted:#8B93A0; --line:#333A42;
+  --blue:#7BA5E0; --blue-soft:#233047; --rust:#E08A6B; --rust-soft:#3A2620;
+  --green:#7FC4A4; --green-soft:#1E3229; --amber:#D9BB6E; --amber-soft:#332A16;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.mono{font-family:'IBM Plex Mono',monospace;}
+header{
+  padding:28px 24px 20px; border-bottom:1px solid var(--line); max-width:1180px; margin:0 auto;
+}
+header h1{margin:0 0 4px; font-size:22px; font-weight:700; letter-spacing:-0.01em;}
+header p{margin:0; color:var(--muted); font-size:14px;}
+.wrap{max-width:1180px; margin:0 auto; padding:24px;}
+
+.dropzone{
+  border:1.5px dashed var(--line); border-radius:6px; background:var(--panel);
+  padding:56px 24px; text-align:center; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+}
+.dropzone.drag{border-color:var(--blue); background:var(--blue-soft);}
+.dropzone svg{margin-bottom:12px;}
+.dropzone .title{font-size:16px; font-weight:600; margin-bottom:6px;}
+.dropzone .sub{color:var(--muted); font-size:13px;}
+.dropzone input{display:none;}
+.dropzone .browse{color:var(--blue); text-decoration:underline; cursor:pointer;}
+
+#fileBar{display:none; align-items:center; gap:10px; margin-bottom:18px; font-size:13px; color:var(--muted);}
+#fileBar.show{display:flex;}
+#fileBar .name{color:var(--ink); font-weight:600;}
+#fileBar button{
+  margin-left:auto; background:none; border:1px solid var(--line); color:var(--muted);
+  padding:6px 12px; border-radius:4px; font-size:12px; cursor:pointer; font-family:inherit;
+}
+#fileBar button:hover{border-color:var(--rust); color:var(--rust);}
+
+#app{display:none;}
+#app.show{display:block;}
+
+nav.tabs{
+  display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:22px; overflow-x:auto;
+}
+nav.tabs button{
+  background:none; border:none; padding:11px 16px; font-size:13.5px; font-weight:500; color:var(--muted);
+  cursor:pointer; font-family:inherit; border-bottom:2px solid transparent; white-space:nowrap;
+}
+nav.tabs button.active{color:var(--ink); border-bottom-color:var(--blue); font-weight:600;}
+nav.tabs button:focus-visible, .dropzone:focus-visible, button:focus-visible{outline:2px solid var(--blue); outline-offset:2px;}
+
+.panel{display:none;}
+.panel.active{display:block;}
+
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:22px;}
+.stat-card{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 16px;}
+.stat-card .num{font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600;}
+.stat-card .lbl{color:var(--muted); font-size:12px; margin-top:2px;}
+
+.card{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:18px 20px; margin-bottom:16px;}
+.card h3{margin:0 0 4px; font-size:14.5px; font-weight:600;}
+.card .hint{color:var(--muted); font-size:12.5px; margin:0 0 14px;}
+
+table{width:100%; border-collapse:collapse; font-size:13px;}
+th{text-align:left; padding:8px 10px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--line); font-size:12px;}
+td{padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+.tbl-wrap{overflow-x:auto;}
+.badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; font-family:'IBM Plex Mono',monospace;}
+.badge.num{background:var(--blue-soft); color:var(--blue);}
+.badge.cat{background:var(--amber-soft); color:var(--amber);}
+.badge.date{background:var(--green-soft); color:var(--green);}
+.badge.id{background:var(--line); color:var(--muted);}
+.badge.bool{background:var(--blue-soft); color:var(--blue);}
+
+.issue{display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line);}
+.issue:last-child{border-bottom:none;}
+.issue .sev{width:8px; height:8px; border-radius:50%; margin-top:6px; flex:none;}
+.sev-high{background:var(--rust);} .sev-med{background:var(--amber);} .sev-low{background:var(--muted);}
+.issue .body b{font-size:13.5px;} .issue .body p{margin:3px 0 0; font-size:13px; color:var(--muted); line-height:1.5;}
+.issue .col-tag{font-family:'IBM Plex Mono',monospace; font-size:11.5px; background:var(--paper); border:1px solid var(--line); padding:1px 6px; border-radius:3px; margin-left:6px;}
+
+.empty{color:var(--muted); font-size:13.5px; padding:20px 0; text-align:center;}
+
+.viz-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:16px;}
+.chart-box{position:relative; height:260px;}
+.corr-cell{text-align:center; font-family:'IBM Plex Mono',monospace; font-size:12px;}
+
+.insight-group{margin-bottom:18px;}
+.insight-group h4{font-size:13px; text-transform:none; margin:0 0 8px; color:var(--muted); font-weight:600;}
+.insight-group ul{margin:0; padding-left:18px;}
+.insight-group li{font-size:13.5px; line-height:1.6; margin-bottom:5px;}
+.tag-fact{color:var(--green);} .tag-pattern{color:var(--blue);} .tag-hyp{color:var(--amber);}
+
+.summary-box{background:var(--blue-soft); border:1px solid var(--line); border-radius:6px; padding:20px 22px;}
+.summary-box h3{margin-top:0;}
+.summary-box dt{font-weight:600; font-size:13.5px; margin-top:14px;}
+.summary-box dt:first-child{margin-top:0;}
+.summary-box dd{margin:4px 0 0; font-size:13.5px; color:var(--ink); line-height:1.6;}
+
+.col-search{width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:4px; background:var(--paper); color:var(--ink); font-family:inherit; font-size:13px; margin-bottom:12px;}
+
+::-webkit-scrollbar{height:8px; width:8px;} ::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>CSV Analyzer</h1>
+  <p>Sube cualquier archivo CSV y obtén un perfil exploratorio automático: tipos de datos, calidad, estadísticas, visualizaciones e insights.</p>
+</header>
+<div class="wrap">
+  <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Cargar archivo CSV">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v12m0-12 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+    <div class="title">Arrastra tu archivo CSV aquí</div>
+    <div class="sub">o <span class="browse">selecciona un archivo</span> desde tu computadora</div>
+    <input type="file" id="fileInput" accept=".csv,text/csv">
+  </div>
+  <div id="fileBar">
+    <span class="mono">📄</span> <span class="name" id="fileName"></span>
+    <span id="fileMeta"></span>
+    <button id="resetBtn">Cargar otro archivo</button>
+  </div>
+
+  <div id="app">
+    <nav class="tabs" id="tabs">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="quality">Data Quality</button>
+      <button data-tab="stats">Statistics</button>
+      <button data-tab="viz">Visualizations</button>
+      <button data-tab="insights">Insights</button>
+    </nav>
+
+    <div class="panel active" id="panel-overview"></div>
+    <div class="panel" id="panel-quality"></div>
+    <div class="panel" id="panel-stats"></div>
+    <div class="panel" id="panel-viz"></div>
+    <div class="panel" id="panel-insights"></div>
+  </div>
+</div>
+
+<script>
+let STATE = null; // {rows, columns, profiles}
+const charts = [];
+
+// ---------- Upload wiring ----------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileBar = document.getElementById('fileBar');
+const app = document.getElementById('app');
+
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' ') fileInput.click(); });
+['dragenter','dragover'].forEach(ev=>dropzone.addEventListener(ev, e=>{e.preventDefault(); dropzone.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev, e=>{e.preventDefault(); dropzone.classList.remove('drag');}));
+dropzone.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+fileInput.addEventListener('change', e=>{ const f=e.target.files[0]; if(f) handleFile(f); });
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  STATE=null; charts.forEach(c=>c.destroy()); charts.length=0;
+  app.classList.remove('show'); fileBar.classList.remove('show'); dropzone.style.display='block'; fileInput.value='';
+});
+
+function handleFile(file){
+  Papa.parse(file, {
+    header:true, skipEmptyLines:true, dynamicTyping:false,
+    complete: res=>{
+      if(!res.data.length){ alert('El archivo no contiene filas de datos.'); return; }
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('fileMeta').textContent = ` · ${(file.size/1024).toFixed(1)} KB`;
+      fileBar.classList.add('show'); dropzone.style.display='none';
+      analyze(res.data, res.meta.fields);
+    },
+    error: err=> alert('No se pudo leer el archivo: '+err.message)
+  });
+}
+
+// ---------- Type detection & profiling ----------
+function isBlank(v){ return v===null||v===undefined||String(v).trim()===''; }
+
+function looksNumeric(v){
+  if(isBlank(v)) return false;
+  const s = String(v).trim().replace(/,/g,'');
+  return /^-?\d+(\.\d+)?$/.test(s);
+}
+function looksDate(v){
+  if(isBlank(v)) return false;
+  const s = String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return true;
+  if(/^\d{2}\/\d{2}\/\d{4}/.test(s)) return true;
+  if(/^\d{8}$/.test(s)){ const y=+s.slice(0,4), m=+s.slice(4,6), d=+s.slice(6,8); return y>1900 && y<2100 && m>=1 && m<=12 && d>=1 && d<=31; }
+  if(/^\d{6}$/.test(s)){ const y=+s.slice(0,4), m=+s.slice(4,6); return y>1900 && y<2100 && m>=1 && m<=12; } // YYYYMM (periodo)
+  return false;
+}
+function parseDateVal(v){
+  const s=String(v).trim();
+  if(/^\d{8}$/.test(s)) return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));
+  if(/^\d{6}$/.test(s)) return new Date(+s.slice(0,4), +s.slice(4,6)-1, 1);
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+// Nombres que típicamente identifican códigos/identificadores aunque su contenido sea numérico
+const CODE_NAME_RE = /(^|_)(id|cod|codigo|tipo|ubigeo|periodo|nro|num|flag|status|estado|key|zip|postal|anio|mes)($|_)/i;
+const ID_NAME_RE = /(^|_)id($|_)|uuid|_key$|^codigo|^code/i;
+
+function detectType(name, nonBlank, uniqueSet, uniqueRatio, numCount, dateCount, nRows){
+  if(nonBlank.length===0) return {type:'categorical', codedNumeric:false};
+  const numRatio = numCount/nonBlank.length;
+  const dateRatio = dateCount/nonBlank.length;
+
+  if(uniqueSet.size===2 && [...uniqueSet].every(v=>/^(true|false|0|1|si|no|yes|s|n)$/i.test(v)))
+    return {type:'boolean', codedNumeric:false};
+
+  if(dateRatio>0.9) return {type:'date', codedNumeric:false};
+
+  const nameIsId = ID_NAME_RE.test(name);
+  const looksLikeId = nameIsId || uniqueRatio>0.98;
+  if(looksLikeId && uniqueRatio>0.9 && nonBlank.length>10) return {type:'id', codedNumeric:false};
+
+  if(numRatio>0.95){
+    const allInts = nonBlank.filter(looksNumeric).every(v=>Number.isInteger(parseFloat(String(v).replace(/,/g,''))));
+    const nameIsCode = CODE_NAME_RE.test(name);
+    const lowCardinality = allInts && uniqueSet.size<=15 && nRows>=40;
+    if(allInts && (nameIsCode || lowCardinality)) return {type:'categorical', codedNumeric:true};
+    return {type:'numeric', codedNumeric:false};
+  }
+  return {type:'categorical', codedNumeric:false};
+}
+
+function profileColumn(name, values, nRows, forceType){
+  const nonBlank = values.filter(v=>!isBlank(v));
+  const missing = nRows - nonBlank.length;
+  const uniqueSet = new Set(nonBlank.map(v=>String(v).trim()));
+  const numCount = nonBlank.filter(looksNumeric).length;
+  const dateCount = nonBlank.filter(looksDate).length;
+  const uniqueRatio = nonBlank.length ? uniqueSet.size/nonBlank.length : 0;
+
+  const detected = detectType(name, nonBlank, uniqueSet, uniqueRatio, numCount, dateCount, nRows);
+  let type = forceType || detected.type;
+  const codedNumeric = !forceType && detected.codedNumeric;
+
+  const prof = {name, type, autoType:detected.type, codedNumeric, missing, missingPct: nRows? missing/nRows*100:0, unique: uniqueSet.size, uniqueRatio, total:nRows};
+
+  if(type==='numeric'){
+    const nums = nonBlank.filter(looksNumeric).map(v=>parseFloat(String(v).replace(/,/g,''))).sort((a,b)=>a-b);
+    prof.nums = nums;
+    prof.min = nums[0]; prof.max = nums[nums.length-1];
+    prof.mean = nums.reduce((a,b)=>a+b,0)/nums.length;
+    prof.median = quantile(nums,0.5);
+    prof.q1 = quantile(nums,0.25); prof.q3 = quantile(nums,0.75);
+    const variance = nums.reduce((a,b)=>a+(b-prof.mean)**2,0)/(nums.length-1||1);
+    prof.std = Math.sqrt(variance);
+    const iqr = prof.q3-prof.q1;
+    prof.outlierLow = prof.q1-1.5*iqr; prof.outlierHigh = prof.q3+1.5*iqr;
+    prof.outliers = nums.filter(n=>n<prof.outlierLow||n>prof.outlierHigh);
+    prof.negatives = nums.filter(n=>n<0).length;
+    prof.zeros = nums.filter(n=>n===0).length;
+  } else if(type==='date'){
+    const dates = nonBlank.map(parseDateVal).filter(d=>d);
+    prof.dates = dates;
+    prof.minDate = dates.length? new Date(Math.min(...dates)) : null;
+    prof.maxDate = dates.length? new Date(Math.max(...dates)) : null;
+  } else {
+    const freq = {};
+    nonBlank.forEach(v=>{ const s=String(v).trim(); freq[s]=(freq[s]||0)+1; });
+    const sorted = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+    prof.topCategories = sorted.slice(0,10).map(([val,count])=>({val,count,pct:count/nonBlank.length*100}));
+    prof.categoryCount = sorted.length;
+    // case/whitespace inconsistency detection
+    const normMap = {};
+    nonBlank.forEach(v=>{ const norm=String(v).trim().toLowerCase(); (normMap[norm]=normMap[norm]||new Set()).add(String(v)); });
+    prof.caseVariants = Object.entries(normMap).filter(([k,set])=>set.size>1).map(([k,set])=>[...set]);
+  }
+  return prof;
+}
+
+function quantile(sortedArr, q){
+  if(!sortedArr.length) return NaN;
+  const pos = (sortedArr.length-1)*q, base=Math.floor(pos), rest=pos-base;
+  return sortedArr[base+1]!==undefined ? sortedArr[base]+rest*(sortedArr[base+1]-sortedArr[base]) : sortedArr[base];
+}
+
+function buildColumns(rows, fields, overrides){
+  return fields.map(name=>{
+    const values = rows.map(r=>r[name]);
+    return profileColumn(name, values, rows.length, overrides[name]);
+  });
+}
+
+function analyze(rows, fields){
+  const overrides = {};
+  const columns = buildColumns(rows, fields, overrides);
+  // duplicate rows
+  const rowKeys = rows.map(r=>fields.map(f=>r[f]).join('␟'));
+  const seen = new Map(); let dupCount=0;
+  rowKeys.forEach(k=>{ seen.set(k,(seen.get(k)||0)+1); });
+  seen.forEach(c=>{ if(c>1) dupCount += c-1; });
+
+  STATE = {rows, fields, columns, overrides, dupCount, nRows:rows.length, nCols:fields.length};
+  renderAll();
+  app.classList.add('show');
+}
+
+function renderAll(){
+  renderOverview(); renderQuality(); renderStats(); renderViz(); renderInsights();
+}
+
+function setColumnType(name, type){
+  if(type==='auto') delete STATE.overrides[name];
+  else STATE.overrides[name] = type;
+  STATE.columns = buildColumns(STATE.rows, STATE.fields, STATE.overrides);
+  const activeTab = document.querySelector('#tabs button.active').dataset.tab;
+  renderAll();
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===activeTab));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+activeTab));
+}
+
+// ---------- Tabs ----------
+document.getElementById('tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+});
+
+const TYPE_LABELS = {numeric:['num','Numérico'],categorical:['cat','Categórico'],date:['date','Fecha'],id:['id','ID'],boolean:['bool','Booleano']};
+function badge(type){
+  const [cls,label]=TYPE_LABELS[type]||['cat',type];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function badgeLabel(type){ return (TYPE_LABELS[type]||[null,type])[1]; }
+function fmt(n, d=2){ if(n===undefined||n===null||isNaN(n)) return '—'; return Number(n).toLocaleString('es-PE',{maximumFractionDigits:d}); }
+
+// ---------- Overview ----------
+function renderOverview(){
+  const S = STATE;
+  const idCols = S.columns.filter(c=>c.type==='id');
+  const dateCols = S.columns.filter(c=>c.type==='date');
+  const html = `
+  <div class="grid">
+    <div class="stat-card"><div class="num">${fmt(S.nRows,0)}</div><div class="lbl">filas</div></div>
+    <div class="stat-card"><div class="num">${S.nCols}</div><div class="lbl">columnas</div></div>
+    <div class="stat-card"><div class="num">${S.columns.filter(c=>c.type==='numeric').length}</div><div class="lbl">numéricas</div></div>
+    <div class="stat-card"><div class="num">${S.columns.filter(c=>c.type==='categorical').length}</div><div class="lbl">categóricas</div></div>
+    <div class="stat-card"><div class="num">${dateCols.length}</div><div class="lbl">tipo fecha</div></div>
+    <div class="stat-card"><div class="num">${idCols.length}</div><div class="lbl">posibles ID</div></div>
+  </div>
+  <div class="card">
+    <h3>Columnas detectadas</h3>
+    <p class="hint">Tipo inferido automáticamente a partir del nombre y contenido de cada columna — no solo si "parece número". Códigos como IDs, tarifas o periodos se tratan como categóricos aunque su valor sea numérico. Si algún tipo no es correcto, cámbialo manualmente con el selector.</p>
+    <input class="col-search" placeholder="Buscar columna..." id="colSearch">
+    <div class="tbl-wrap"><table id="colTable"><thead><tr>
+      <th>Columna</th><th>Tipo</th><th>Faltantes</th><th>Únicos</th><th>Ejemplo</th>
+    </tr></thead><tbody>
+    ${S.columns.map(c=>{
+      const ex = S.rows.find(r=>!isBlank(r[c.name]));
+      const isOverridden = S.overrides[c.name] !== undefined;
+      return `<tr class="colrow" data-name="${c.name.toLowerCase()}">
+        <td class="mono">${c.name}${c.codedNumeric?'<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">código numérico, no magnitud</div>':''}</td>
+        <td>
+          <select class="type-select" data-col="${c.name}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:3px 6px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink);">
+            <option value="auto"${!isOverridden?' selected':''}>Auto: ${badgeLabel(c.autoType)}</option>
+            <option value="numeric"${c.type==='numeric'&&isOverridden?' selected':''}>Numérico</option>
+            <option value="categorical"${c.type==='categorical'&&isOverridden?' selected':''}>Categórico</option>
+            <option value="date"${c.type==='date'&&isOverridden?' selected':''}>Fecha</option>
+            <option value="id"${c.type==='id'&&isOverridden?' selected':''}>ID</option>
+            <option value="boolean"${c.type==='boolean'&&isOverridden?' selected':''}>Booleano</option>
+          </select>
+        </td>
+        <td class="mono">${c.missing} (${fmt(c.missingPct,1)}%)</td>
+        <td class="mono">${fmt(c.unique,0)}</td>
+        <td class="mono" style="color:var(--muted)">${ex? String(ex[c.name]).slice(0,28):'—'}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>
+  </div>`;
+  document.getElementById('panel-overview').innerHTML = html;
+  document.getElementById('colSearch').addEventListener('input', e=>{
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('#colTable .colrow').forEach(row=>{
+      row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+    });
+  });
+  document.querySelectorAll('.type-select').forEach(sel=>{
+    sel.addEventListener('change', e=> setColumnType(e.target.dataset.col, e.target.value));
+  });
+}
+
+// ---------- Data Quality ----------
+function renderQuality(){
+  const S = STATE;
+  const issues = [];
+
+  S.columns.forEach(c=>{
+    if(c.missing>0){
+      const sev = c.missingPct>30?'high':c.missingPct>5?'med':'low';
+      issues.push({sev, title:`Valores faltantes`, col:c.name,
+        desc:`${c.missing} de ${S.nRows} filas (${fmt(c.missingPct,1)}%) no tienen valor. Puede afectar cálculos y modelos si no se maneja explícitamente.`});
+    }
+  });
+  if(S.dupCount>0){
+    issues.push({sev: S.dupCount/S.nRows>0.05?'high':'med', title:'Filas duplicadas', col:null,
+      desc:`Se detectaron ${S.dupCount} filas completamente duplicadas (${fmt(S.dupCount/S.nRows*100,1)}% del total). Verifica si son registros legítimos repetidos o un error de carga.`});
+  }
+  S.columns.forEach(c=>{
+    if(c.type==='numeric' && c.outliers && c.outliers.length>0){
+      issues.push({sev: c.outliers.length/c.nums.length>0.1?'med':'low', title:'Posibles outliers', col:c.name,
+        desc:`${c.outliers.length} valores fuera del rango [${fmt(c.outlierLow)}, ${fmt(c.outlierHigh)}] (método IQR × 1.5). Ejemplo: ${c.outliers.slice(0,3).map(v=>fmt(v)).join(', ')}. Pueden ser errores de captura o casos reales extremos — requieren revisión manual.`});
+    }
+    if(c.type==='numeric' && c.negatives>0){
+      issues.push({sev:'low', title:'Valores negativos', col:c.name,
+        desc:`${c.negatives} valores negativos encontrados. Confirma si son válidos para esta variable (p.ej. no lo serían en una cantidad o un conteo).`});
+    }
+  });
+  S.columns.forEach(c=>{
+    if(c.type==='categorical' && c.caseVariants && c.caseVariants.length>0){
+      issues.push({sev:'low', title:'Inconsistencia de formato (mayúsculas/espacios)', col:c.name,
+        desc:`${c.caseVariants.length} valor(es) tienen variantes de escritura, p.ej.: "${c.caseVariants[0].join('" vs "')}". Podrían representar la misma categoría y conviene normalizarlas.`});
+    }
+    if(c.type==='categorical' && c.categoryCount===c.unique && c.unique>0 && c.uniqueRatio>0.95 && S.nRows>20){
+      issues.push({sev:'low', title:'Cardinalidad muy alta', col:c.name,
+        desc:`Casi todos los valores son únicos (${c.unique} de ${S.nRows}). Puede tratarse en realidad de un identificador, texto libre, o una columna poco útil para agrupar.`});
+    }
+    if(c.type==='categorical' && c.unique===1){
+      issues.push({sev:'low', title:'Columna constante', col:c.name,
+        desc:`Solo tiene un valor único en todo el dataset. No aporta información para el análisis y podría eliminarse.`});
+    }
+  });
+  S.columns.forEach(c=>{
+    if(c.type==='numeric'){
+      const S_ = c.nums;
+      if(S_.every(n=>Number.isInteger(n)) && c.min>=0 && /edad|age/i.test(c.name) && c.max>120){
+        issues.push({sev:'med', title:'Valor posiblemente imposible', col:c.name, desc:`Máximo de ${fmt(c.max,0)} parece fuera de un rango humano plausible para una columna de edad.`});
+      }
+    }
+  });
+
+  const order={high:0,med:1,low:2};
+  issues.sort((a,b)=>order[a.sev]-order[b.sev]);
+
+  const counts = {high:issues.filter(i=>i.sev==='high').length, med:issues.filter(i=>i.sev==='med').length, low:issues.filter(i=>i.sev==='low').length};
+
+  document.getElementById('panel-quality').innerHTML = `
+  <div class="grid">
+    <div class="stat-card"><div class="num" style="color:var(--rust)">${counts.high}</div><div class="lbl">problemas prioritarios</div></div>
+    <div class="stat-card"><div class="num" style="color:var(--amber)">${counts.med}</div><div class="lbl">a revisar</div></div>
+    <div class="stat-card"><div class="num" style="color:var(--muted)">${counts.low}</div><div class="lbl">menores</div></div>
+    <div class="stat-card"><div class="num">${fmt(S.dupCount,0)}</div><div class="lbl">filas duplicadas</div></div>
+  </div>
+  <div class="card">
+    <h3>Hallazgos de calidad</h3>
+    <p class="hint">Ningún dato fue modificado ni eliminado. Esto es un diagnóstico — decide tú cómo tratarlo.</p>
+    ${issues.length? issues.map(i=>`
+      <div class="issue">
+        <div class="sev sev-${i.sev}"></div>
+        <div class="body"><b>${i.title}</b>${i.col?`<span class="col-tag">${i.col}</span>`:''}<p>${i.desc}</p></div>
+      </div>`).join('') : '<div class="empty">No se detectaron problemas evidentes de calidad.</div>'}
+  </div>`;
+}
+
+// ---------- Statistics ----------
+function renderStats(){
+  const S = STATE;
+  const numCols = S.columns.filter(c=>c.type==='numeric');
+  const catCols = S.columns.filter(c=>c.type==='categorical'||c.type==='boolean');
+
+  let html = '';
+  if(numCols.length){
+    html += `<div class="card"><h3>Variables numéricas</h3><p class="hint">Media, mediana, desviación estándar y cuartiles para cada variable.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Columna</th><th>Media</th><th>Mediana</th><th>Desv. Est.</th><th>Mín</th><th>Q1</th><th>Q3</th><th>Máx</th></tr></thead><tbody>
+    ${numCols.map(c=>`<tr><td class="mono">${c.name}</td><td class="mono">${fmt(c.mean)}</td><td class="mono">${fmt(c.median)}</td><td class="mono">${fmt(c.std)}</td><td class="mono">${fmt(c.min)}</td><td class="mono">${fmt(c.q1)}</td><td class="mono">${fmt(c.q3)}</td><td class="mono">${fmt(c.max)}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  }
+  if(catCols.length){
+    html += catCols.map(c=>`
+      <div class="card"><h3>${c.name}</h3><p class="hint">${c.categoryCount||c.unique} categorías distintas · categorías más frecuentes:</p>
+      <div class="tbl-wrap"><table><thead><tr><th>Categoría</th><th>Frecuencia</th><th>%</th></tr></thead><tbody>
+      ${(c.topCategories||[]).map(t=>`<tr><td>${t.val}</td><td class="mono">${t.count}</td><td class="mono">${fmt(t.pct,1)}%</td></tr>`).join('')}
+      </tbody></table></div></div>`).join('');
+  }
+  const dateCols = S.columns.filter(c=>c.type==='date');
+  if(dateCols.length){
+    html += dateCols.map(c=>`<div class="card"><h3>${c.name}</h3><p class="hint">Columna de fecha. Rango: <span class="mono">${c.minDate.toLocaleDateString('es-PE')}</span> a <span class="mono">${c.maxDate.toLocaleDateString('es-PE')}</span> (${c.dates.length} valores válidos).</p></div>`).join('');
+  }
+  if(!numCols.length && !catCols.length && !dateCols.length) html = '<div class="empty">No hay suficientes datos para calcular estadísticas.</div>';
+  document.getElementById('panel-stats').innerHTML = html;
+}
+
+// ---------- Visualizations ----------
+function destroyCharts(){ charts.forEach(c=>c.destroy()); charts.length=0; }
+function themeColors(){
+  const cs = getComputedStyle(document.body);
+  return {ink:cs.getPropertyValue('--ink').trim(), muted:cs.getPropertyValue('--muted').trim(), line:cs.getPropertyValue('--line').trim(), blue:cs.getPropertyValue('--blue').trim(), rust:cs.getPropertyValue('--rust').trim(), green:cs.getPropertyValue('--green').trim()};
+}
+
+function renderViz(){
+  destroyCharts();
+  const S = STATE, T = themeColors();
+  const numCols = S.columns.filter(c=>c.type==='numeric' && c.nums.length>3);
+  const catCols = S.columns.filter(c=>(c.type==='categorical'||c.type==='boolean') && c.unique<=30 && c.unique>1);
+  const dateCols = S.columns.filter(c=>c.type==='date' && c.dates.length>3);
+
+  let boxes = [];
+
+  numCols.forEach(c=>{
+    boxes.push({title:`Distribución: ${c.name}`, hint:'Histograma — frecuencia de valores agrupados en intervalos.', id:'h_'+c.name, kind:'hist', col:c});
+  });
+  catCols.forEach(c=>{
+    boxes.push({title:`Categorías: ${c.name}`, hint:`Top ${Math.min(10,c.topCategories.length)} categorías más frecuentes.`, id:'b_'+c.name, kind:'bar', col:c});
+  });
+  // correlation-based scatter (top pairs)
+  let corrPairs = [];
+  for(let i=0;i<numCols.length;i++) for(let j=i+1;j<numCols.length;j++){
+    const r = pearson(numCols[i], numCols[j], S.rows);
+    if(r!==null) corrPairs.push({a:numCols[i], b:numCols[j], r});
+  }
+  corrPairs.sort((x,y)=>Math.abs(y.r)-Math.abs(x.r));
+  const scatterPairs = corrPairs.filter(p=>Math.abs(p.r)>0.4).slice(0,3);
+  scatterPairs.forEach(p=>{
+    boxes.push({title:`${p.a.name} vs ${p.b.name}`, hint:`Correlación de Pearson r = ${fmt(p.r,2)}. No implica causalidad.`, id:'s_'+p.a.name+'_'+p.b.name, kind:'scatter', pair:p});
+  });
+  // time series
+  if(dateCols.length && numCols.length){
+    const dc = dateCols[0], nc = numCols[0];
+    boxes.push({title:`${nc.name} en el tiempo (${dc.name})`, hint:'Serie temporal agregada por fecha (suma de valores por día).', id:'t_'+nc.name, kind:'time', dateCol:dc, numCol:nc});
+  }
+
+  document.getElementById('panel-viz').innerHTML = `
+    ${corrPairs.length>1 ? `<div class="card"><h3>Matriz de correlación</h3><p class="hint">Coeficiente de Pearson entre pares de variables numéricas (−1 a 1). Valores cercanos a 0 indican poca relación lineal.</p>${corrMatrixHTML(numCols, S.rows)}</div>`:''}
+    <div class="viz-grid">
+    ${boxes.length? boxes.map(b=>`<div class="card"><h3>${b.title}</h3><p class="hint">${b.hint}</p><div class="chart-box"><canvas id="${b.id}"></canvas></div></div>`).join('') : ''}
+    </div>
+    ${!boxes.length && corrPairs.length<=1 ? '<div class="empty">No se encontraron columnas apropiadas para generar visualizaciones automáticas.</div>':''}
+  `;
+
+  boxes.forEach(b=>{
+    const ctx = document.getElementById(b.id).getContext('2d');
+    if(b.kind==='hist') charts.push(histChart(ctx, b.col, T));
+    if(b.kind==='bar') charts.push(barChart(ctx, b.col, T));
+    if(b.kind==='scatter') charts.push(scatterChart(ctx, b.pair, S.rows, T));
+    if(b.kind==='time') charts.push(timeChart(ctx, b.dateCol, b.numCol, S.rows, T));
+  });
+}
+
+function pearson(colA, colB, rows){
+  const pairs = rows.map(r=>[r[colA.name], r[colB.name]]).filter(([a,b])=>looksNumeric(a)&&looksNumeric(b)).map(([a,b])=>[parseFloat(a),parseFloat(b)]);
+  if(pairs.length<5) return null;
+  const n=pairs.length, mx=pairs.reduce((s,p)=>s+p[0],0)/n, my=pairs.reduce((s,p)=>s+p[1],0)/n;
+  let num=0, dx=0, dy=0;
+  pairs.forEach(([x,y])=>{ num+=(x-mx)*(y-my); dx+=(x-mx)**2; dy+=(y-my)**2; });
+  const denom = Math.sqrt(dx*dy);
+  return denom===0? null : num/denom;
+}
+
+function corrMatrixHTML(numCols, rows){
+  const n = numCols.length;
+  let rowsHtml = numCols.map(c1=>`<tr><th style="text-align:left">${c1.name}</th>${numCols.map(c2=>{
+    const r = c1.name===c2.name?1:pearson(c1,c2,rows);
+    const v = r===null?0:r;
+    const alpha = Math.min(1,Math.abs(v));
+    const color = v>=0 ? `rgba(46,94,170,${alpha*0.55})` : `rgba(178,75,41,${alpha*0.55})`;
+    return `<td class="corr-cell" style="background:${color}">${r===null?'—':fmt(v,2)}</td>`;
+  }).join('')}</tr>`).join('');
+  return `<div class="tbl-wrap"><table><thead><tr><th></th>${numCols.map(c=>`<th>${c.name}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+}
+
+function baseOpts(T){ return {responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:T.muted, font:{size:10}}, grid:{color:T.line}}, y:{ticks:{color:T.muted, font:{size:10}}, grid:{color:T.line}}}}; }
+
+function histChart(ctx, col, T){
+  const nums = col.nums, bins = Math.min(12, Math.max(5, Math.round(Math.sqrt(nums.length))));
+  const min=col.min, max=col.max, width=(max-min)/bins || 1;
+  const counts = new Array(bins).fill(0);
+  nums.forEach(v=>{ let idx = Math.floor((v-min)/width); if(idx>=bins) idx=bins-1; if(idx<0) idx=0; counts[idx]++; });
+  const labels = counts.map((_,i)=> (min+i*width).toFixed(1));
+  return new Chart(ctx,{type:'bar', data:{labels, datasets:[{data:counts, backgroundColor:T.blue, borderRadius:2}]}, options:baseOpts(T)});
+}
+function barChart(ctx, col, T){
+  const top = col.topCategories;
+  return new Chart(ctx,{type:'bar', data:{labels:top.map(t=>t.val.length>14?t.val.slice(0,13)+'…':t.val), datasets:[{data:top.map(t=>t.count), backgroundColor:T.green, borderRadius:2}]}, options:{...baseOpts(T), indexAxis: top.length>6?'y':'x'}});
+}
+function scatterChart(ctx, pair, rows, T){
+  const pts = rows.map(r=>({x:parseFloat(r[pair.a.name]), y:parseFloat(r[pair.b.name])})).filter(p=>!isNaN(p.x)&&!isNaN(p.y));
+  return new Chart(ctx,{type:'scatter', data:{datasets:[{data:pts.slice(0,2000), backgroundColor:T.blue+'99', pointRadius:2.5}]}, options:baseOpts(T)});
+}
+function timeChart(ctx, dateCol, numCol, rows, T){
+  const agg = {};
+  rows.forEach(r=>{
+    const dv=r[dateCol.name], nv=r[numCol.name];
+    if(isBlank(dv)||!looksNumeric(nv)) return;
+    const d = parseDateVal(dv); if(!d) return;
+    const key = d.toISOString().slice(0,10);
+    agg[key] = (agg[key]||0) + parseFloat(nv);
+  });
+  const keys = Object.keys(agg).sort();
+  return new Chart(ctx,{type:'line', data:{labels:keys, datasets:[{data:keys.map(k=>agg[k]), borderColor:T.blue, backgroundColor:T.blue+'22', fill:true, tension:0.25, pointRadius:0}]}, options:baseOpts(T)});
+}
+
+// ---------- Insights ----------
+function renderInsights(){
+  const S = STATE;
+  const facts=[], patterns=[], hyps=[];
+
+  facts.push(`El dataset contiene ${fmt(S.nRows,0)} filas y ${S.nCols} columnas.`);
+  const numCols = S.columns.filter(c=>c.type==='numeric');
+  const catCols = S.columns.filter(c=>c.type==='categorical');
+  if(S.dupCount>0) facts.push(`Existen ${S.dupCount} filas duplicadas exactas.`);
+  const highMissing = S.columns.filter(c=>c.missingPct>20);
+  if(highMissing.length) facts.push(`${highMissing.length} columna(s) tienen más de 20% de valores faltantes: ${highMissing.map(c=>c.name).join(', ')}.`);
+
+  numCols.forEach(c=>{
+    if(c.outliers.length>0) patterns.push(`${c.name} presenta ${c.outliers.length} valores atípicos (outliers) según el rango intercuartílico.`);
+    if(Math.abs(c.mean-c.median) > (c.std||1)*0.3 && c.std>0) patterns.push(`${c.name} muestra asimetría notable (media ${fmt(c.mean)} vs mediana ${fmt(c.median)}), lo que sugiere una distribución sesgada.`);
+  });
+  // correlation-derived patterns
+  let corrPairs=[];
+  for(let i=0;i<numCols.length;i++) for(let j=i+1;j<numCols.length;j++){
+    const r = pearson(numCols[i], numCols[j], S.rows);
+    if(r!==null && Math.abs(r)>0.5) corrPairs.push({a:numCols[i].name,b:numCols[j].name,r});
+  }
+  corrPairs.sort((x,y)=>Math.abs(y.r)-Math.abs(x.r));
+  corrPairs.slice(0,4).forEach(p=>{
+    patterns.push(`${p.a} y ${p.b} tienen una correlación ${p.r>0?'positiva':'negativa'} de r=${fmt(p.r,2)}.`);
+    hyps.push(`Investigar si la relación entre ${p.a} y ${p.b} responde a un factor común o merece un análisis causal más profundo (la correlación por sí sola no lo determina).`);
+  });
+  catCols.forEach(c=>{
+    if(c.topCategories && c.topCategories[0] && c.topCategories[0].pct>60){
+      patterns.push(`En ${c.name}, la categoría "${c.topCategories[0].val}" concentra ${fmt(c.topCategories[0].pct,1)}% de los registros.`);
+      hyps.push(`Evaluar si la concentración en "${c.topCategories[0].val}" (columna ${c.name}) responde a un sesgo de muestreo o refleja la realidad del proceso capturado.`);
+    }
+    if(c.caseVariants && c.caseVariants.length>0){
+      hyps.push(`Normalizar mayúsculas/espacios en ${c.name} podría reducir el conteo de categorías único y mejorar agregaciones.`);
+    }
+  });
+  if(highMissing.length) hyps.push(`Determinar si los valores faltantes en ${highMissing.map(c=>c.name).join(', ')} son aleatorios o siguen un patrón (p. ej. asociados a otra variable).`);
+
+  if(!facts.length) facts.push('No se identificaron hechos adicionales relevantes.');
+  if(!patterns.length) patterns.push('No se detectaron patrones destacados con las heurísticas actuales.');
+  if(!hyps.length) hyps.push('No hay hipótesis sugeridas automáticamente para este dataset.');
+
+  const dateCols = S.columns.filter(c=>c.type==='date');
+  const idCols = S.columns.filter(c=>c.type==='id');
+
+  const summary = `
+  <div class="summary-box">
+    <h3>Resumen ejecutivo</h3>
+    <dl>
+      <dt>¿Qué contiene este dataset?</dt>
+      <dd>${S.nRows} registros con ${S.nCols} columnas: ${numCols.length} numéricas, ${catCols.length} categóricas${dateCols.length?`, ${dateCols.length} de fecha`:''}${idCols.length?`, ${idCols.length} identificador(es)`:''}.</dd>
+      <dt>¿Cuáles son sus principales características?</dt>
+      <dd>${numCols.length? `Las variables numéricas incluyen ${numCols.slice(0,3).map(c=>c.name).join(', ')}${numCols.length>3?'…':''}.`:''} ${catCols.length? `Las categóricas más relevantes son ${catCols.slice(0,3).map(c=>c.name).join(', ')}${catCols.length>3?'…':''}.`:''}</dd>
+      <dt>¿Qué problemas de calidad deberían revisarse?</dt>
+      <dd>${S.dupCount>0?`${S.dupCount} filas duplicadas. `:''}${highMissing.length? `Valores faltantes relevantes en ${highMissing.map(c=>c.name).join(', ')}. `:''}${numCols.some(c=>c.outliers.length>0)? 'Presencia de outliers en variables numéricas. ':''}${(!S.dupCount && !highMissing.length && !numCols.some(c=>c.outliers.length>0))?'No se detectaron problemas mayores.':''}Revisa la pestaña Data Quality para el detalle completo.</dd>
+      <dt>¿Qué patrones interesantes aparecen?</dt>
+      <dd>${patterns.slice(0,3).join(' ')}</dd>
+      <dt>¿Qué análisis recomendarías realizar a continuación?</dt>
+      <dd>${corrPairs.length? 'Profundizar en las relaciones entre variables correlacionadas con un análisis de regresión o segmentación. ':''}${catCols.length? 'Cruzar las variables categóricas con las numéricas para detectar diferencias entre grupos. ':''}${dateCols.length? 'Analizar tendencias temporales con mayor granularidad. ':''}Validar manualmente los outliers y duplicados antes de cualquier modelado.</dd>
+    </dl>
+  </div>`;
+
+  document.getElementById('panel-insights').innerHTML = `
+    <div class="card">
+      <div class="insight-group"><h4><span class="tag-fact">●</span> Hechos observados</h4><ul>${facts.map(f=>`<li>${f}</li>`).join('')}</ul></div>
+      <div class="insight-group"><h4><span class="tag-pattern">●</span> Posibles patrones</h4><ul>${patterns.map(f=>`<li>${f}</li>`).join('')}</ul></div>
+      <div class="insight-group"><h4><span class="tag-hyp">●</span> Hipótesis a investigar</h4><ul>${hyps.map(f=>`<li>${f}</li>`).join('')}</ul></div>
+    </div>
+    ${summary}
+  `;
+}
+</script>
+</body>
+</html>
